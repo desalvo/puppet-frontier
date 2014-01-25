@@ -1,0 +1,470 @@
+#!/bin/bash
+#
+# Description:  Manages a Frontier Squid Server as an 
+#               OCF High-Availability resource under Heartbeat/LinuxHA control
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# Copyright (c) 2012 Alessandro De Salvo
+#
+#######################################################################
+# OCF parameters:
+#   OCF_RESKEY_squid_exe    : Executable file
+#   OCF_RESKEY_squid_conf   : Configuration file
+#   OCF_RESKEY_squid_port   : Port number
+#   OCF_RESKEY_debug_mode   : Debug mode
+#   OCF_RESKEY_debug_log    : Debug log file
+#   OCF_RESKEY_squid_stop_timeout:
+#                             Number of seconds to await to confirm a
+#                             normal stop method
+#
+#   OCF_RESKEY_squid_exe and OCF_RESKEY_squid_conf must be specified.
+#   Each of the rests has its default value or refers OCF_RESKEY_squid_conf
+#   to make its value when no explicit value is given.
+###############################################################################
+
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
+
+usage() 
+{
+	cat <<-!
+usage: $0 action
+
+action:
+        start       : start a new squid instance
+
+        stop        : stop the running squid instance
+
+        status      : return the status of squid, run or down
+
+        monitor     : return TRUE if the squid appears to be working.
+
+        meta-data   : show meta data message
+
+!
+	return $OCF_ERR_ARGS
+}
+
+metadata_squid()
+{
+    cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="FrontierSquid">
+<version>1.0</version>
+
+<longdesc lang="en">
+The resource agent of Frontier Squid.
+This manages a Frontier Squid instance as an HA resource.
+</longdesc>
+<shortdesc lang="en">Manages a Frontier Squid proxy server instance</shortdesc>
+
+<parameters>
+
+<parameter name="squid_exe" required="1" unique="0">
+<longdesc lang="en">
+This is a required parameter. This parameter specifies squid's
+executable file.
+</longdesc>
+<shortdesc>Executable file</shortdesc>
+<content type="string" default=""/>
+</parameter>
+
+<parameter name="squid_conf" required="1" unique="1">
+<longdesc lang="en">
+This is a required parameter. This parameter specifies a configuration file
+for a squid instance managed by this RA.
+</longdesc>
+<shortdesc>Configuration file</shortdesc>
+<content type="string" default=""/>
+</parameter>
+
+<parameter name="squid_stop_timeout" unique="0">
+<longdesc lang="en">
+This is an omittable parameter.
+On a stop action, a normal stop method is firstly used.
+and then the confirmation of its completion is awaited for
+the specified seconds by this parameter.
+The default value is 10.
+</longdesc>
+<shortdesc>Number of seconds to await to confirm a normal stop method</shortdesc>
+<content type="integer" default="10"/>
+</parameter>
+
+<parameter name="debug_mode" unique="0">
+<longdesc lang="en">
+This is an optional parameter.
+This RA runs in debug mode when this parameter includes 'x' or 'v'.
+If 'x' is included, both of STDOUT and STDERR redirect to the logfile
+specified by "debug_log", and then the builtin shell option 'x' is turned on.
+It is similar about 'v'.
+</longdesc>
+<shortdesc>Debug mode</shortdesc>
+<content type="string" default=""/>
+</parameter>
+
+<parameter name="debug_log" unique="0">
+<longdesc lang="en">
+This is an optional and omittable parameter.
+This parameter specifies a destination file for debug logs
+and works only if this RA run in debug mode.  Refer to "debug_mode"
+about debug mode. If no value is given but it's requied, it's made by the
+following rules: "/var/log/" as a directory part, the basename of
+the configuration file given by "syslog_ng_conf" as a basename part,
+".log" as a suffix.
+</longdesc>
+<shortdesc>A destination of the debug log</shortdesc>
+<content type="string" default=""/>
+</parameter>
+
+</parameters>
+
+<actions>
+<action name="start" timeout="60s" />
+<action name="stop" timeout="120s" />
+<action name="status" timeout="60" />
+<action name="monitor" depth="0" timeout="30s" interval="10s" />
+<action name="meta-data" timeout="5s" />
+<action name="validate-all"  timeout="5"/>
+</actions>
+</resource-agent>
+END
+
+	return $OCF_SUCCESS
+}
+
+getEnvVarsFromConfig()
+{
+  CACHE_DIR=`awk '$1 == "cache_dir" {x=$3} END{print x}' $SQUID_CONF`
+  CACHE_LOG=`awk '$1 == "cache_log" {x=$2} END{print x}' $SQUID_CONF`
+  ACCESS_LOG=`awk '$1 == "access_log" {x=$2} END{print x}' $SQUID_CONF`
+
+  if [ ! $1 == status ]; then
+    # Complain if CACHE_DIR is empty or /
+    if [ -z "${CACHE_DIR}" ]; then
+      ocf_log err "$SQUID_NAME:cache_dir not found in $SQUID_CONF"
+      return $OCF_ERR_CONFIGURED
+    elif [ "${CACHE_DIR}" == "/" ]; then
+      ocf_log err "$SQUID_NAME:cache_dir may not be '/' in $SQUID_CONF"
+      return $OCF_ERR_CONFIGURED
+    fi
+
+    # Complain if there is a missing directory 
+    if [ ! -d "${CACHE_DIR}" ]; then
+      ocf_log err "$SQUID_NAME:Missing directory: CACHE_DIR: ${CACHE_DIR}"
+      return $OCF_ERR_CONFIGURED
+    fi
+    CACHE_LOG_DIR=`dirname "${CACHE_LOG}"`
+    if [ ! -d "${CACHE_LOG_DIR}" ]; then
+      ocf_log err "$SQUID_NAME:Missing directory: CACHE_LOG_DIR: ${CACHE_LOG_DIR}"
+      return $OCF_ERR_CONFIGURED
+    fi
+    ACCESS_LOG_DIR=`dirname "${ACCESS_LOG}"`
+    if [ ! -d "${ACCESS_LOG_DIR}" ]; then
+      ocf_log err "$SQUID_NAME:Missing directory: ACCESS_LOG_DIR: ${ACCESS_LOG_DIR}"
+      return $OCF_ERR_CONFIGURED
+    fi
+  fi
+
+  SQUID_PIDFILE=`awk '$1 == "pid_filename" {x=$2} END{print x}' $SQUID_CONF`
+  SQUID_PIDFILE_DIR=`dirname "${SQUID_PIDFILE}"`
+  if [ ! -d "${SQUID_PIDFILE_DIR}" ]; then
+    ocf_log err "$SQUID_NAME:Missing directory: SQUID_PIDFILE_DIR: ${SQUID_PIDFILE_DIR}"
+    return $OCF_ERR_CONFIGURED
+  fi
+
+  SQUID_PORT=`awk '$1 == "http_port" {x=$2} END{print x}' $SQUID_CONF`
+  if [ -z "${SQUID_PORT}" ]; then
+    ocf_log err "$SQUID_NAME:Missing http_port option in $SQUID_CONF"
+    return $OCF_ERR_CONFIGURED
+  fi
+
+  return $OCF_SUCCESS
+}
+
+
+get_pids()
+{
+  SQUID_PIDS=( )
+
+  # Seek by pattern
+  SQUID_PIDS[0]=$(pgrep -f "$PROCESS_PATTERN")
+
+  # Seek by pidfile
+  SQUID_PIDS[1]=$(awk '1{print $1}' $SQUID_PIDFILE 2>/dev/null)
+
+  if [[ -n "${SQUID_PIDS[1]}" ]]; then
+    typeset exe
+    exe=$(ls -l "/proc/${SQUID_PIDS[1]}/exe")
+    if [[ $? = 0 ]]; then
+      exe=${exe##*-> }
+      if ! [[ "$exe" = $SQUID_EXE ]]; then
+        SQUID_PIDS[1]=""
+      fi
+    else
+      SQUID_PIDS[1]=""
+    fi
+  fi
+
+  # Seek by port
+  SQUID_PIDS[2]=$(
+    netstat -apn |
+    awk '/tcp.*[0-9]+\.[0-9]+\.+[0-9]+\.[0-9]+:'$SQUID_PORT' /{
+    sub("\\/.*", "", $7); print $7; exit}')
+}
+
+is_squid_running()
+{
+ if [ -f "$SQUID_PIDFILE" ]; then
+   typeset PID="`cat <$SQUID_PIDFILE 2>/dev/null`"
+   if [ -n "$PID" ]; then
+     typeset PIDEXE="`ls -l /proc/$PID/exe 2>/dev/null|sed 's,.*-> ,,'`"
+     if [ -n "$PIDEXE" ]; then
+       typeset PIDINODE="`ls -iL ${PIDEXE%% *} 2>/dev/null`" 
+       typeset SQUIDINODE="`ls -iL ${SQUID_EXE%% *}`"
+       if [ "${PIDINODE%% *}" = "${SQUIDINODE%% *}" ]; then
+         return $OCF_SUCCESS
+       fi
+     fi
+   else
+     rm -f "$SQUID_PIDFILE"
+   fi
+ fi
+ return $OCF_NOT_RUNNING
+}
+
+
+is_squid_dead()
+{
+  if is_squid_running; then
+    return $OCF_ERR_GENERIC
+  else
+    return $OCF_SUCCESS
+  fi
+}
+
+
+cleancache()
+{
+  if [ -f $CACHE_DIR/swap.state ]; then
+    if $SQUID_EXE -k parse; then
+      if is_squid_running; then
+        ocf_log err "$SQUID_NAME:Frontier Squid is running"
+        return $OCF_ERR_GENERIC
+      fi
+    else
+      RETVAL=$?
+      ocf_log err "$SQUID_NAME:Error parsing $SQUID_CONF" 
+      return $RETVAL
+    fi
+    ocf_log info "$SQUID_NAME:Start erasing the disk cache in the background"
+    rm -rf $CACHE_DIR/.deleting
+    mkdir -p $CACHE_DIR/.deleting
+    mv $CACHE_DIR/* $CACHE_DIR/.deleting
+    nohup rm -rf $CACHE_DIR/.deleting </dev/null >/dev/null 2>&1 &
+  fi
+  ocf_log info "$SQUID_NAME:Initializing the disk cache"
+  $SQUID_EXE -z
+  sleep 3
+  return $OCF_SUCCESS
+}
+
+
+monitor_squid()
+{
+  if is_squid_running; then
+    return $OCF_SUCCESS
+  else
+    return $OCF_NOT_RUNNING
+  fi
+}
+
+
+start_squid()
+{
+  typeset status
+
+  monitor_squid
+  status=$?
+
+  if [[ $status != $OCF_NOT_RUNNING ]]; then
+    return $status
+  fi
+
+  ocf_log info "$SQUID_NAME:Starting Frontier Squid"
+  ocf_run $SQUID_EXE -f "$SQUID_CONF" -DFS
+  sleep 3
+  monitor_squid
+  status=$?
+  if [[ $status != $OCF_SUCCESS ]]; then
+    get_pids
+    kill -KILL ${SQUID_PIDS[0]} ${SQUID_PIDS[2]}
+    ocf_log info "$SQUID_NAME:Cleaning cache"
+    cleancache
+    ocf_log info "$SQUID_NAME:Re-starting Frontier Squid"
+    ocf_run $SQUID_EXE -f "$SQUID_CONF" -DFS
+    status=$?
+    if [[ $status != $OCF_SUCCESS ]]; then
+      ocf_log err "$SQUID_NAME:Re-starting Frontier Squid failed"
+      return $OCF_ERR_GENERIC
+    fi
+  fi
+
+  while true; do
+    if is_squid_running; then
+      return $OCF_SUCCESS
+    else
+      ocf_log info "$SQUID_NAME:Waiting for Frontier Squid to be invoked"
+      sleep 2
+    fi
+  done
+
+  return $OCF_ERR_GENERIC
+}
+
+
+stop_squid()
+{
+  typeset lapse_sec
+  ocf_log info "$SQUID_NAME:Stopping Frontier Squid"
+
+  if ocf_run $SQUID_EXE -f $SQUID_CONF -k shutdown; then
+    lapse_sec=0
+    while true; do
+      if is_squid_dead; then
+        rm -f $SQUID_PIDFILE
+        return $OCF_SUCCESS
+      fi
+      (( lapse_sec = lapse_sec + 1 ))
+      if (( lapse_sec > SQUID_STOP_TIMEOUT )); then
+        break
+      fi
+      sleep 1
+      ocf_log info "$SQUID_NAME:$FUNCNAME:$LINENO: " \
+              "stop NORM $lapse_sec/$SQUID_STOP_TIMEOUT"
+    done
+  fi
+
+  while true; do
+    get_pids
+    ocf_log info "$SQUID_NAME:$FUNCNAME:$LINENO: " \
+            "try to stop by SIGKILL:${SQUID_PIDS[0]} ${SQUID_PIDS[2]}"
+    kill -KILL ${SQUID_PIDS[0]} ${SQUID_PIDS[2]}
+    sleep 1
+    if is_squid_dead; then
+      rm -f $SQUID_PIDFILE
+      return $OCF_SUCCESS
+    fi
+  done
+
+  return $OCF_ERR_GENERIC
+}
+
+status_squid()
+{
+  return $OCF_SUCCESS
+}
+
+
+: === Debug ${0##*/} $1 ===
+
+if [[ "$1" = "meta-data" ]]; then
+	metadata_squid
+	exit $?
+fi
+
+SQUID_CONF="${OCF_RESKEY_squid_conf}"
+if [[ -z "$SQUID_CONF" ]]; then
+	ocf_log err "SQUID_CONF is not defined"
+	exit $OCF_ERR_CONFIGURED
+fi
+
+SQUID_NAME="${SQUID_CONF##*/}"
+SQUID_NAME="${SQUID_NAME%.*}"
+
+DEBUG_LOG="${OCF_RESKEY_debug_log-/var/log/squid_${SQUID_NAME}_debug}.log"
+
+DEBUG_MODE=""
+case $OCF_RESKEY_debug_mode in
+	*x*) DEBUG_MODE="${DEBUG_MODE}x";;
+esac
+case $OCF_RESKEY_debug_mode in
+	*v*) DEBUG_MODE="${DEBUG_MODE}v";;
+esac
+
+if [ -n "$DEBUG_MODE" ]; then
+	PS4='\d \t \h '"${1-unknown} "
+	export PS4
+	exec 1>>$DEBUG_LOG 2>&1
+	set -$DEBUG_MODE
+fi
+
+SQUID_EXE="${OCF_RESKEY_squid_exe}"
+if [[ -z "$SQUID_EXE" ]]; then
+	ocf_log err "SQUID_EXE is not defined"
+	exit $OCF_ERR_CONFIGURED
+fi
+if [[ ! -x "$SQUID_EXE" ]]; then
+	ocf_log err "$SQUID_EXE is not found"
+	exit $OCF_ERR_CONFIGURED
+fi
+
+SQUID_OPTS="${OCF_RESKEY_squid_opts}"
+
+SQUID_PIDS=( )
+
+SQUID_CONFIRM_TRIALCOUNT="${OCF_RESKEY_squid_confirm_trialcount-3}"
+
+SQUID_STOP_TIMEOUT="${OCF_RESKEY_squid_stop_timeout-5}"
+SQUID_SUSPEND_TRIALCOUNT="${OCF_RESKEY_squid_suspend_trialcount-10}"
+
+PROCESS_PATTERN="$SQUID_EXE -f $SQUID_CONF"
+
+COMMAND=$1
+
+getEnvVarsFromConfig $COMMAND
+func_status=$?
+if [[ $func_status != $OCF_SUCCESS ]] ; then
+	exit $func_status
+fi
+
+case "$COMMAND" in
+	start)
+		ocf_log debug  "[$SQUID_NAME] Enter squid start"
+		start_squid
+		func_status=$?
+		ocf_log debug  "[$SQUID_NAME] Leave squid start $func_status"
+		exit $func_status
+		;;
+	stop)
+		ocf_log debug  "[$SQUID_NAME] Enter squid stop"
+		stop_squid
+		func_status=$?
+		ocf_log debug  "[$SQUID_NAME] Leave squid stop $func_status"
+		exit $func_status
+		;;
+	status)
+		status_squid
+		exit $?
+		;;
+	monitor)
+		monitor_squid
+		func_status=$?
+		exit $func_status
+		;;
+	*)
+		usage
+		;;
+esac
+
+# vim: set sw=4 ts=4 :
+
