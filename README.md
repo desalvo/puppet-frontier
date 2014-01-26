@@ -1,4 +1,4 @@
-puppet-percona
+puppet-frontier
 ======
 
 Puppet module for managing Frontier configurations.
