@@ -59,3 +59,7 @@ Release Notes
 **0.1.0**
 
 * Initial version.
+
+**0.1.1**
+
+* Change the default of cache_dir to /var/squid/cache.

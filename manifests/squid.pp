@@ -37,7 +37,7 @@
 class frontier::squid (
   $customize_file = undef,
   $customize_template = undef,
-  $cache_dir = undef,
+  $cache_dir = $frontier::params::frontier_cache_dir,
   $install_resource = false,
   $resource_path = $frontier::params::resource_agents_path
 ) inherits params {
