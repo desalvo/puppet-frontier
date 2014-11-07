@@ -13,6 +13,9 @@
 # [*cache_dir*]
 #   The cache directory.
 #
+# [*max_access_log*]
+#   The max size of the log before rotating them
+#
 # [*install_resource*]
 #   The cache directory.
 #
@@ -38,6 +41,7 @@ class frontier::squid (
   $customize_file = undef,
   $customize_template = undef,
   $cache_dir = $frontier::params::frontier_cache_dir,
+  $max_access_log = undef,
   $install_resource = false,
   $resource_path = $frontier::params::resource_agents_path
 ) inherits params {
@@ -105,6 +109,15 @@ class frontier::squid (
           source  => "puppet:///modules/frontier/FrontierSquid",
           require => File[$resource_path]
       }
+  }
+
+  file {$frontier::params::frontier_squidconf:
+      ensure  => file,
+      owner   => root,
+      group   => root,
+      mode    => 0644,
+      content => template('frontier/squidconf.erb'),
+      require => Package[$frontier::params::frontier_packages],
   }
 
   service {$frontier::params::frontier_service:

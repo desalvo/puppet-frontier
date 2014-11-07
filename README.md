@@ -29,6 +29,7 @@ The following parameters are supported:
 * **customize_file**: the customization configuration file to be used, not used if unset
 * **customize_template**: the customization configuration template to be used, not used if unset
 * **cache_dir**: the cache directory to use
+* **max_access_log**: The max size of the log before rotating them
 * **install_resource**: set this to true if you want to instal the pacemaker FrontierSquid resource
 * **resource_path**: the path where to install the pacemaker resource, default "/usr/lib/ocf/resource.d/lcg"
 
@@ -56,10 +57,14 @@ Contributors
 Release Notes
 -------------
 
-**0.1.0**
+**0.1.2**
 
-* Initial version.
+* Add the max_access_log parameter
 
 **0.1.1**
 
 * Change the default of cache_dir to /var/squid/cache.
+
+**0.1.0**
+
+* Initial version.
