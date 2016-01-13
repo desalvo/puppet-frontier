@@ -44,7 +44,7 @@ class frontier::squid (
   $max_access_log = undef,
   $install_resource = false,
   $resource_path = $frontier::params::resource_agents_path
-) inherits params {
+) inherits frontier::params {
   yumrepo {'cern-frontier':
       baseurl => 'http://frontier.cern.ch/dist/rpms/',
       enabled => 1,
