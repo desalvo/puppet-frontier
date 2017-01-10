@@ -32,7 +32,8 @@ The following parameters are supported:
 * **max_access_log**: The max size of the log before rotating them
 * **install_resource**: set this to true if you want to instal the pacemaker FrontierSquid resource
 * **resource_path**: the path where to install the pacemaker resource, default "/usr/lib/ocf/resource.d/lcg"
-
+* $customize_params : hash that can be used to provide the customize_lines param with ... params.
+* $customize_lines : array, containing lines that will be interpreted as inline templates and will be used to fill the default customize.sh 
 Usage
 -----
 
