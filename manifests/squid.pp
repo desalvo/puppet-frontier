@@ -97,11 +97,12 @@ class frontier::squid (
     'setoption("cache_mem", "128 MB")',
     'setoptionparameter("cache_dir", 3, "<%= scope["frontier::squid::customize_params"]["cache_size"] -%>")',
   ],
+  $ensure = 'latest',
 ) inherits frontier::params {
   include ::frontier::repo
 
   package {$frontier::params::frontier_packages:
-      ensure  => latest,
+      ensure  => $ensure,
       require => Yumrepo['frontier-squid-cern'],
       notify  => Service[$frontier::params::frontier_service]
   }
@@ -109,8 +110,8 @@ class frontier::squid (
   if ($cache_dir) {
       file { $cache_dir:
           ensure  => directory,
-          owner   => squid,
-          group   => squid,
+          owner   => 'squid',
+          group   => 'squid',
           mode    => '0755',
           require => Package[$frontier::params::frontier_packages],
           notify  => Service[$frontier::params::frontier_service]
@@ -120,8 +121,8 @@ class frontier::squid (
   if ($customize_file) {
       file {$frontier::params::frontier_customize:
           ensure  => file,
-          owner   => squid,
-          group   => squid,
+          owner   => 'squid',
+          group   => 'squid',
           mode    => '0755',
           source  => $customize_file,
           require => Package[$frontier::params::frontier_packages],
@@ -132,8 +133,8 @@ class frontier::squid (
   if ($customize_template) {
       file {$frontier::params::frontier_customize:
           ensure  => file,
-          owner   => squid,
-          group   => squid,
+          owner   => 'squid',
+          group   => 'squid',
           mode    => '0755',
           content => template($customize_template),
           require => Package[$frontier::params::frontier_packages],
@@ -161,8 +162,8 @@ class frontier::squid (
 
   file {$frontier::params::frontier_squidconf:
       ensure  => file,
-      owner   => root,
-      group   => root,
+      owner   => 'root',
+      group   => 'root',
       mode    => '0644',
       content => template('frontier/squidconf.erb'),
       require => Package[$frontier::params::frontier_packages],
