@@ -145,17 +145,17 @@ class frontier::squid (
   if ($install_resource) {
       file { $resource_path:
           ensure  => directory,
-          owner   => "root",
-          group   => "root",
+          owner   => 'root',
+          group   => 'root',
           mode    => '0755',
       }
 
       file { "${resource_path}/FrontierSquid":
           ensure  => file,
-          owner   => "root",
-          group   => "root",
+          owner   => 'root',
+          group   => 'root',
           mode    => '0755',
-          source  => "puppet:///modules/frontier/FrontierSquid",
+          source  => "puppet:///modules/${module_name}/FrontierSquid",
           require => File[$resource_path]
       }
   }
@@ -165,7 +165,7 @@ class frontier::squid (
       owner   => 'root',
       group   => 'root',
       mode    => '0644',
-      content => template('frontier/squidconf.erb'),
+      content => template("${module_name}/squidconf.erb"),
       require => Package[$frontier::params::frontier_packages],
   }
 

@@ -1,0 +1,14 @@
+{
+  "name": "desalvo-frontier",
+  "version": "0.1.3",
+  "author": "desalvo",
+  "summary": "Puppet module for Frontier configuration",
+  "license": "Apache License, Version 2.0",
+  "source": "https://github.com/desalvo/puppet-frontier",
+  "description": "Puppet module for Frontier configuration",
+  "issues_url": "https://github.com/desalvo/puppet-frontier/issues",
+  "project_page": "https://github.com/desalvo/puppet-frontier",
+  "dependencies": [
+  
+  ]
+}

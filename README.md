@@ -58,6 +58,12 @@ Contributors
 Release Notes
 -------------
 
+**0.1.3**
+
+* Update the frontier repo RPM version
+* Squid 3.5 support
+* Puppet 4 support
+
 **0.1.2**
 
 * Add the max_access_log parameter
