@@ -13,6 +13,10 @@
 # [*cache_dir*]
 #   The cache directory.
 #
+# [*clean_cache_on_start*]
+#   Whether to purge the cache directory on service start.
+#   On by packaging default due to UFS constantly growing issues.
+#
 # [*max_access_log*]
 #   The max size of the log before rotating them
 #
@@ -85,6 +89,7 @@ class frontier::squid (
   $customize_file = undef,
   $customize_template = 'frontier/customize.sh.erb',
   $cache_dir = $frontier::params::frontier_cache_dir,
+  $clean_cache_on_start = $frontier::params::clean_cache_on_start,
   $max_access_log = undef,
   $install_resource = false,
   $resource_path = $frontier::params::resource_agents_path,

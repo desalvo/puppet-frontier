@@ -10,6 +10,7 @@ class frontier::params {
       $frontier_customize = '/etc/squid/customize.sh'
       $frontier_squidconf = '/etc/sysconfig/frontier-squid'
       $frontier_cache_dir = '/var/cache/squid'
+      $clean_cache_on_start = true
       $resource_agents_path = '/usr/lib/ocf/resource.d/lcg'
     }
     default:   {

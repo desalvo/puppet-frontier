@@ -4,3 +4,8 @@ export SQUID_MAX_ACCESS_LOG=<%= @max_access_log %>
 <% if @daemons -%>
 export SQUID_NUM_SERVICES=<%= @daemons %>
 <% end -%>
+<% if @clean_cache_on_start -%>
+export SQUID_CLEAN_CACHE_ON_START=true
+<% else -%>
+export SQUID_CLEAN_CACHE_ON_START=false
+<% end -%>
