@@ -29,6 +29,7 @@ The following parameters are supported:
 * **customize_file**: the customization configuration file to be used, not used if unset
 * **customize_template**: the customization configuration template to be used, not used if unset
 * **cache_dir**: the cache directory to use
+* **clean_cache_on_start**: Whether to purge the cache directory on service start, package default is `true`.
 * **max_access_log**: The max size of the log before rotating them
 * **install_resource**: set this to true if you want to instal the pacemaker FrontierSquid resource
 * **resource_path**: the path where to install the pacemaker resource, default "/usr/lib/ocf/resource.d/lcg"
