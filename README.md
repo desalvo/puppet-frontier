@@ -34,6 +34,14 @@ The following parameters are supported:
 * **resource_path**: the path where to install the pacemaker resource, default "/usr/lib/ocf/resource.d/lcg"
 * $customize_params : hash that can be used to provide the customize_lines param with ... params.
 * $customize_lines : array, containing lines that will be interpreted as inline templates and will be used to fill the default customize.sh 
+
+Custom Facts
+------------
+
+This module also defines a custom fact `squidcachepartsize` which contains the size (in MB) of the partition
+on which `cache_dir` is located. It can be used to define `cache_size` more easily, as shown in the
+more complex usage example below.
+
 Usage
 -----
 
@@ -47,6 +55,30 @@ This is a simple example to configure a frontier squid.
 class { 'frontier::squid':
     customize_file => 'puppet:///modules/mymodule/customize.sh',
     cache_dir      => 'var/squid/cache'
+}
+```
+
+### Example 2
+
+This is a slightly more complex example, setting up custom configuration
+and defining an appropriate `cache_size` using the custom fact `squidcachepartsize`,
+granting monitoring access to CERN and FNAL and setting things up for an imaginary local network `10.0.0.0/21` with a local monitoring node at `10.0.0.1`. It also makes use of structured facts to set up SMP mode and `cache_mem`, and it uses the modern rock database backend, and disables cache purging on start since that's not needed with the rock backend.
+```frontier_squid2
+class { '::frontier::squid':
+    clean_cache_on_start => false,
+    customize_params => {
+        worker_cnt => floor(0.5*$facts['processors']['count']),
+        cache_size => floor(0.9*$facts['squidcachepartsize']),
+        cache_mem  => floor(0.4*($facts['memory']['system']['total_bytes']/1024/1024)),
+    },
+    customize_lines => [
+        'setoption("acl NET_LOCAL src", "10.0.0.0/21")',
+        'setoption("acl HOST_MONITOR src", "127.0.0.1/32 128.142.0.0/16 188.184.128.0/17 188.185.128.0/17 131.225.240.232/32 10.0.0.1/32")',
+        'setoption("cache_mem", "<%= scope["frontier::squid::customize_params"]["cache_mem"] -%> MB")',
+        'setoption("cache_dir", "rock /var/cache/squid <%= scope["frontier::squid::customize_params"]["cache_size"] -%>")',
+        'setoption("workers", "<%= scope["frontier::squid::customize_params"]["worker_cnt"] -%>")',
+        'setoption("memory_cache_shared", "on")',
+    ],
 }
 ```
 
