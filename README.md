@@ -64,11 +64,17 @@ This is a slightly more complex example, setting up custom configuration
 and defining an appropriate `cache_size` using the custom fact `squidcachepartsize`,
 granting monitoring access to CERN and FNAL and setting things up for an imaginary local network `10.0.0.0/21` with a local monitoring node at `10.0.0.1`. It also makes use of structured facts to set up SMP mode and `cache_mem`, and it uses the modern rock database backend, and disables cache purging on start since that's not needed with the rock backend.
 ```frontier_squid2
+# Custom fact may not be defined on first puppet run.
+if (!has_key($facts, 'squidcachepartsize')) {
+    $squidcachepartsize = 1000
+} else {
+    $squidcachepartsize = $facts['squidcachepartsize']
+}
 class { '::frontier::squid':
     clean_cache_on_start => false,
     customize_params => {
         worker_cnt => floor(0.5*$facts['processors']['count']),
-        cache_size => floor(0.9*$facts['squidcachepartsize']),
+        cache_size => floor(0.9*$squidcachepartsize),
         cache_mem  => floor(0.4*($facts['memory']['system']['total_bytes']/1024/1024)),
     },
     customize_lines => [
