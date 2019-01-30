@@ -32,6 +32,7 @@
     priority=> $priority,
     gpgkey => "file:///etc/pki/rpm-gpg/${gpgkey}",
     metadata_expire => $metadata_expire,
+    require => Exec["gpgfile $gpgkey import"],
   }
 
   #If there is a "purge" on the repos dir, make sure we're not purged :
